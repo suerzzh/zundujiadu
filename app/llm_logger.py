@@ -4,6 +4,7 @@ Logs to workspace/{project_id}/logs/llm.jsonl with fields:
     ts, stage, chapter, latency_ms, token_in, token_out, cost_cny, status, error
 """
 
+import json
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -43,6 +44,28 @@ class LLMLogger:
         except Exception:
             # Logging must never crash the pipeline
             pass
+
+    def get_total_cost(self, project_id: str) -> float:
+        """Calculate total cost from all logged LLM calls for a project."""
+        total = 0.0
+        try:
+            log_path = workspace_manager.get_project_dir(project_id) / "logs" / "llm.jsonl"
+            if not log_path.exists():
+                return 0.0
+            with open(log_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                        if entry.get("status") != "error":
+                            total += entry.get("cost_cny", 0)
+                    except (json.JSONDecodeError, Exception):
+                        continue
+        except Exception:
+            pass
+        return round(total, 4)
 
 
 # Singleton
