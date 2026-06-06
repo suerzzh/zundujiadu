@@ -36,17 +36,29 @@ class CharacterProfile(BaseModel):
     traits: list[str] = Field(default_factory=list)
     arc: str = ""
     titles: list[str] = Field(default_factory=list, description="称呼规范")
+    relationships: list[str] = Field(default_factory=list, description="关系网络：与其他角色的关系")
 
 
 class ConflictPool(BaseModel):
     """Conflict pool from analysis."""
     core_conflicts: list[str] = Field(default_factory=list)
     sub_conflicts: list[str] = Field(default_factory=list)
+    potential_conflicts: list[str] = Field(default_factory=list, description="潜在冲突：可挖掘但未展开的矛盾")
+
+
+class SatisfactionFulfillment(BaseModel):
+    """A single satisfaction point fulfillment entry."""
+    point: str = Field(default="", description="爽点名称")
+    name: str = Field(default="", description="爽点别名")
+    method: str = Field(default="", description="兑现方式")
+    episode: Optional[int] = Field(default=None, description="兑现时机(集号)")
+    status: str = Field(default="pending", description="兑现状态: fulfilled/partial/pending")
 
 
 class SatisfactionPool(BaseModel):
     """Satisfaction/pleasure point pool."""
     points: list[str] = Field(default_factory=list, description="爽点列表")
+    fulfillments: list[SatisfactionFulfillment] = Field(default_factory=list, description="爽点兑现表")
 
 
 class AdaptationRisk(BaseModel):
@@ -63,6 +75,7 @@ class Analysis(BaseModel):
     conflict_pool: ConflictPool = Field(default_factory=ConflictPool)
     satisfaction_pool: SatisfactionPool = Field(default_factory=SatisfactionPool)
     characters: list[CharacterProfile] = Field(default_factory=list)
+    naming_conventions: list[str] = Field(default_factory=list, description="称呼规范")
     adaptation_strategy: str = ""
     risks: list[AdaptationRisk] = Field(default_factory=list)
 
@@ -74,10 +87,12 @@ class EpisodeEntry(BaseModel):
     episode: int
     title: str = ""
     episode_type: str = ""  # setup / escalation / climax / resolution
+    source_chapters: list[int] = Field(default_factory=list, description="对应原文章节")
     events: list[str] = Field(default_factory=list, description="事件流程")
     hook: str = ""  # 钩子
     emotional_intensity: float = 0.5
     cliffhanger: str = ""
+    satisfaction_points: list[str] = Field(default_factory=list, description="爽点设计")
 
 
 class EmotionCurve(BaseModel):
@@ -169,13 +184,40 @@ class QualityGateCheck(BaseModel):
     details: str = ""
 
 
+class Suggestion(BaseModel):
+    """A modification suggestion."""
+    description: str = ""
+    episode: Optional[int] = None
+
+
+class PassReviewResult(BaseModel):
+    """Result of a single review pass (four-pass method)."""
+    pass_name: str = ""  # structure / character / dialogue / detail
+    issues: list[str] = Field(default_factory=list)
+    suggestions: list[str] = Field(default_factory=list)
+    issue_count: int = 0
+    passed: bool = True  # True if issue_count <= 3
+
+
+class CrossEpisodeCheck(BaseModel):
+    """Cross-episode duplicate check result."""
+    check_type: str = ""  # events / dialogue / conflict / hook
+    has_duplicates: bool = False
+    duplicates: list[str] = Field(default_factory=list)
+
+
 class Review(BaseModel):
     """Reviewer output: review report."""
     dimension_scores: list[DimensionScore] = Field(default_factory=list)
     top_issues: list[TopIssue] = Field(default_factory=list)
-    suggestions: list[str] = Field(default_factory=list)
+    suggestions: list[Suggestion] = Field(default_factory=list)
     quality_gates: list[QualityGateCheck] = Field(default_factory=list)
     overall_score: float = 0.0
+    # Four-pass review (v2.1)
+    four_pass_results: list[PassReviewResult] = Field(default_factory=list)
+    cross_episode_checks: list[CrossEpisodeCheck] = Field(default_factory=list)
+    event_integrity_score: float = 0.0  # 0.0-1.0
+    review_status: str = "completed"  # completed / conditional / failed / paused
 
 
 # ── Continuity Models ─────────────────────────────────────────
