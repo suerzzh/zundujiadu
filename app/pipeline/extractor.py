@@ -1,7 +1,8 @@
 """Extractor Agent — extracts per-chapter event summaries.
 
 Stage 0: Reads raw novel text, outputs events.json to workspace/10_events/.
-Runs N LLM calls (one per chapter) with concurrency limit of 2.
+Runs N LLM calls (one per chapter) with shared concurrency pool (total = 2).
+Uses RetryPolicy for classified retry with exponential backoff 1s/3s/9s.
 """
 
 import asyncio
@@ -12,6 +13,7 @@ from typing import AsyncGenerator, Callable, Optional
 from app.concurrency import concurrency_controller
 from app.llm_client import llm_client, RateLimitError, LLMServerError, LLMOutputError
 from app.pipeline.base import BaseAgent
+from app.pipeline.retry import RetryPolicy, classify_error, ErrorCategory
 from app.schemas import Event, ChapterEvents, EventsResult
 from app.workspace import workspace_manager
 
@@ -44,17 +46,20 @@ class ExtractorAgent(BaseAgent):
 
         results: list[ChapterEvents] = []
         total = len(chapters)
-        semaphore = asyncio.Semaphore(2)  # Concurrency limit
 
         async def extract_chapter(chapter: dict) -> ChapterEvents:
-            async with semaphore:
+            async with concurrency_controller._semaphore:
                 messages = [
                     {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": f"章节标题: {chapter['title']}\n\n{chapter['content']}"},
                 ]
 
-                # Retry with exponential backoff
-                for attempt in range(3):
+                # Classified retry via RetryPolicy
+                # Rate limit: exponential backoff 1s/3s/9s (3 retries)
+                event = None
+                last_error = None
+
+                for attempt in range(RetryPolicy.MAX_RETRIES[ErrorCategory.RATE_LIMIT] + 1):
                     try:
                         event = await llm_client.call_with_model(
                             messages=messages,
@@ -66,14 +71,24 @@ class ExtractorAgent(BaseAgent):
                         )
                         break
                     except RateLimitError:
-                        wait_time = 2 ** attempt  # 1s, 2s, 4s
-                        await asyncio.sleep(wait_time)
-                    except (LLMOutputError, Exception) as e:
-                        if attempt == 2:
-                            # Mark as failed, continue pipeline
+                        if attempt >= RetryPolicy.MAX_RETRIES[ErrorCategory.RATE_LIMIT]:
                             event = Event()
                             break
-                        await asyncio.sleep(1)
+                        delay = RetryPolicy.BASE_DELAYS[ErrorCategory.RATE_LIMIT] * (
+                            RetryPolicy.EXP_BASE[ErrorCategory.RATE_LIMIT] ** attempt
+                        )
+                        await asyncio.sleep(delay)
+                        last_error = RateLimitError()
+                    except (LLMOutputError, Exception) as e:
+                        category = classify_error(e)
+                        max_retries = RetryPolicy.MAX_RETRIES[category]
+                        if attempt >= max_retries:
+                            event = Event()
+                            break
+                        base_delay = RetryPolicy.BASE_DELAYS[category]
+                        exp_base = RetryPolicy.EXP_BASE[category]
+                        await asyncio.sleep(base_delay * (exp_base ** attempt))
+                        last_error = e
                 else:
                     event = Event()
 
