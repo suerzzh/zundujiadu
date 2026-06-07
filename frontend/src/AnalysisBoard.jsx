@@ -119,7 +119,10 @@ export default function AnalysisBoard() {
             </tr>
           </thead>
           <tbody>
-            {analysis.satisfaction_pool?.fulfillments?.map((f, i) => (
+            {(analysis.satisfaction_pool?.fulfillments?.length > 0
+              ? analysis.satisfaction_pool.fulfillments
+              : analysis.satisfaction_pool?.points?.map((p) => ({ point: p }))
+            )?.map((f, i) => (
               <tr key={i}>
                 <td style={{ fontSize: 12 }}>{f.point || f.name}</td>
                 <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.method || '-'}</td>

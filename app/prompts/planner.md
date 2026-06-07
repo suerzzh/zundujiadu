@@ -7,8 +7,10 @@
 1. **分集目录**: 每集包含:
    - 集号和标题
    - 集类型（setup/escalation/climax/resolution）
+   - 原文章节（本集对应原小说的哪些章节，如 [1,2,3]）
    - 事件流程（本集涵盖哪些事件）
    - 钩子（本集结尾的悬念/钩子）
+   - 爽点设计（本集兑现或铺垫了哪些爽点）
    - 情绪强度（0-1）
    - 悬念设计
 
@@ -39,8 +41,10 @@
       "episode": 1,
       "title": "集标题",
       "episode_type": "setup",
+      "source_chapters": [1, 2, 3],
       "events": ["事件1", "事件2"],
       "hook": "钩子描述",
+      "satisfaction_points": ["爽点1", "爽点2"],
       "emotional_intensity": 0.6,
       "cliffhanger": "悬念描述"
     }

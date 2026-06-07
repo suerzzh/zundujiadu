@@ -55,32 +55,34 @@ function PlanView() {
       {/* Episode list */}
       <div className="card">
         <div className="card-title">分集目录</div>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>集号</th>
-              <th>标题</th>
-              <th>类型</th>
-              <th>原文章节</th>
-              <th>钩子</th>
-              <th>爽点</th>
-              <th>情绪</th>
-            </tr>
-          </thead>
-          <tbody>
-            {plan.episodes?.map((ep) => (
-              <tr key={ep.episode}>
-                <td>{ep.episode}</td>
-                <td>{ep.title}</td>
-                <td><span className={`tag tag-${ep.episode_type}`}>{ep.episode_type}</span></td>
-                <td style={{ fontSize: 12 }}>{ep.source_chapters?.join(',') || '-'}</td>
-                <td style={{ fontSize: 12 }}>{ep.hook}</td>
-                <td style={{ fontSize: 12, color: 'var(--primary-light)' }}>{ep.satisfaction_points?.join('、') || '-'}</td>
-                <td>{(ep.emotional_intensity * 100).toFixed(0)}%</td>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table" style={{ minWidth: 600 }}>
+            <thead>
+              <tr>
+                <th>集号</th>
+                <th>标题</th>
+                <th>类型</th>
+                <th>原文章节</th>
+                <th>钩子</th>
+                <th>爽点</th>
+                <th>情绪</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {plan.episodes?.map((ep) => (
+                <tr key={ep.episode}>
+                  <td>{ep.episode}</td>
+                  <td style={{ maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.title}</td>
+                  <td><span className={`tag tag-${ep.episode_type}`}>{ep.episode_type}</span></td>
+                  <td style={{ fontSize: 12 }}>{ep.source_chapters?.join(',') || '-'}</td>
+                  <td style={{ fontSize: 12, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.hook || '-'}</td>
+                  <td style={{ fontSize: 12, color: 'var(--primary-light)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.satisfaction_points?.join('、') || '-'}</td>
+                  <td>{(ep.emotional_intensity * 100).toFixed(0)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Emotion curve */}

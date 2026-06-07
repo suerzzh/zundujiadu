@@ -31,7 +31,10 @@
     "sub_conflicts": ["次要冲突1"]
   },
   "satisfaction_pool": {
-    "points": ["爽点1", "爽点2"]
+    "points": ["爽点1", "爽点2"],
+    "fulfillments": [
+      {"point": "爽点名称", "name": "别名", "method": "兑现方式", "episode": 1, "status": "pending"}
+    ]
   },
   "characters": [
     {
