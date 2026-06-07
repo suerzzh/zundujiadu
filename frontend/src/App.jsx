@@ -1,3 +1,4 @@
+import { useState, useCallback, useRef, useEffect } from 'react'
 import useStore from './store'
 import UploadPanel from './UploadPanel'
 import ProgressBar from './ProgressBar'
@@ -6,21 +7,20 @@ import ScriptEditor from './ScriptEditor'
 import EventsBoard from './EventsBoard'
 import AnalysisBoard from './AnalysisBoard'
 import ReviewPanel from './ReviewPanel'
-import ContinuityTimeline from './ContinuityTimeline'
+import LandingPage from './LandingPage'
 
 const TABS = [
   { key: 'events', label: '事件核对' },
   { key: 'analysis', label: '改编分析' },
   { key: 'plan', label: '分集规划' },
   { key: 'review', label: '审核报告' },
-  { key: 'continuity', label: '连续性' },
 ]
 
 function RightPanel() {
-  const { activeTab, setActiveTab, pipelineStatus } = useStore()
+  const { activeTab, setActiveTab } = useStore()
 
   return (
-    <div className="panel panel-right">
+    <>
       <div className="tabs">
         {TABS.map((tab) => (
           <div
@@ -37,9 +37,8 @@ function RightPanel() {
         {activeTab === 'analysis' && <AnalysisBoard />}
         {activeTab === 'plan' && <PlanView />}
         {activeTab === 'review' && <ReviewPanel />}
-        {activeTab === 'continuity' && <ContinuityTimeline />}
       </div>
-    </div>
+    </>
   )
 }
 
@@ -55,34 +54,32 @@ function PlanView() {
       {/* Episode list */}
       <div className="card">
         <div className="card-title">分集目录</div>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="data-table" style={{ minWidth: 600 }}>
-            <thead>
-              <tr>
-                <th>集号</th>
-                <th>标题</th>
-                <th>类型</th>
-                <th>原文章节</th>
-                <th>钩子</th>
-                <th>爽点</th>
-                <th>情绪</th>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>集号</th>
+              <th>标题</th>
+              <th>类型</th>
+              <th>原文章节</th>
+              <th>钩子</th>
+              <th>爽点</th>
+              <th>情绪</th>
+            </tr>
+          </thead>
+          <tbody>
+            {plan.episodes?.map((ep) => (
+              <tr key={ep.episode}>
+                <td>{ep.episode}</td>
+                <td>{ep.title}</td>
+                <td><span className={`tag tag-${ep.episode_type}`}>{ep.episode_type}</span></td>
+                <td style={{ fontSize: 12 }}>{ep.source_chapters?.join(',') || '-'}</td>
+                <td style={{ fontSize: 12 }}>{ep.hook || '-'}</td>
+                <td style={{ fontSize: 12, color: 'var(--primary-light)' }}>{ep.satisfaction_points?.join('、') || '-'}</td>
+                <td>{(ep.emotional_intensity * 100).toFixed(0)}%</td>
               </tr>
-            </thead>
-            <tbody>
-              {plan.episodes?.map((ep) => (
-                <tr key={ep.episode}>
-                  <td>{ep.episode}</td>
-                  <td style={{ maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.title}</td>
-                  <td><span className={`tag tag-${ep.episode_type}`}>{ep.episode_type}</span></td>
-                  <td style={{ fontSize: 12 }}>{ep.source_chapters?.join(',') || '-'}</td>
-                  <td style={{ fontSize: 12, maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.hook || '-'}</td>
-                  <td style={{ fontSize: 12, color: 'var(--primary-light)', maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.satisfaction_points?.join('、') || '-'}</td>
-                  <td>{(ep.emotional_intensity * 100).toFixed(0)}%</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {/* Emotion curve */}
@@ -132,11 +129,90 @@ function PlanView() {
   )
 }
 
+/* Resizable handle between panels */
+function ResizeHandle({ onDrag, direction = 'col' }) {
+  const dragging = useRef(false)
+
+  const onMouseDown = useCallback((e) => {
+    e.preventDefault()
+    dragging.current = true
+    document.body.style.cursor = direction === 'col' ? 'col-resize' : 'row-resize'
+    document.body.style.userSelect = 'none'
+
+    const onMouseMove = (moveEvent) => {
+      if (!dragging.current) return
+      onDrag(moveEvent)
+    }
+
+    const onMouseUp = () => {
+      dragging.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+  }, [onDrag, direction])
+
+  return (
+    <div className={`resize-handle resize-handle-${direction}`} onMouseDown={onMouseDown}>
+      <div className="resize-handle-bar" />
+    </div>
+  )
+}
+
 export default function App() {
+  const [view, setView] = useState('landing')
+
   const {
     projectId, pipelineStatus, error, warnings, clearError, chapterCount,
     failedStage, retryFailedStage, totalDurationSec, totalCost, exportOutputs,
   } = useStore()
+
+  // Resizable panel widths (px)
+  const [leftWidth, setLeftWidth] = useState(320)
+  const [rightWidth, setRightWidth] = useState(384)
+  const containerRef = useRef(null)
+
+  // Persist panel widths to localStorage
+  useEffect(() => {
+    const savedLeft = localStorage.getItem('panel-left-width')
+    const savedRight = localStorage.getItem('panel-right-width')
+    if (savedLeft) setLeftWidth(Number(savedLeft))
+    if (savedRight) setRightWidth(Number(savedRight))
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('panel-left-width', String(leftWidth))
+  }, [leftWidth])
+
+  useEffect(() => {
+    localStorage.setItem('panel-right-width', String(rightWidth))
+  }, [rightWidth])
+
+  // Left panel drag handler
+  const onDragLeft = useCallback((e) => {
+    const container = containerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const newWidth = Math.max(200, Math.min(e.clientX - rect.left, rect.width * 0.5))
+    setLeftWidth(newWidth)
+  }, [])
+
+  // Right panel drag handler
+  const onDragRight = useCallback((e) => {
+    const container = containerRef.current
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const newWidth = Math.max(200, Math.min(rect.right - e.clientX, rect.width * 0.5))
+    setRightWidth(newWidth)
+  }, [])
+
+  if (view === 'landing') {
+    return <LandingPage onEnterApp={() => setView('app')} />
+  }
 
   return (
     <div className="app">
@@ -185,9 +261,9 @@ export default function App() {
       )}
 
       {/* Main layout */}
-      <div className="main">
+      <div className="main" ref={containerRef}>
         {/* Left panel: Upload + Progress + Chapters */}
-        <div className="panel panel-left">
+        <div className="panel panel-left" style={{ width: leftWidth, minWidth: 0, flex: 'none' }}>
           <div className="panel-header">小说输入</div>
           <div className="panel-body">
             {!projectId && <UploadPanel />}
@@ -200,14 +276,22 @@ export default function App() {
           </div>
         </div>
 
+        {/* Resize handle: left-center */}
+        <ResizeHandle onDrag={onDragLeft} direction="col" />
+
         {/* Center panel: Script Editor */}
-        <div className="panel panel-center">
+        <div className="panel panel-center" style={{ flex: 1, minWidth: 0 }}>
           <div className="panel-header">剧本编辑器</div>
           <ScriptEditor />
         </div>
 
+        {/* Resize handle: center-right */}
+        <ResizeHandle onDrag={onDragRight} direction="col" />
+
         {/* Right panel: Analysis tabs */}
-        <RightPanel />
+        <div className="panel panel-right" style={{ width: rightWidth, minWidth: 0, flex: 'none' }}>
+          <RightPanel />
+        </div>
       </div>
     </div>
   )

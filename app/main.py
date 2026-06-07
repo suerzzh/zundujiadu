@@ -48,7 +48,7 @@ async def upload_novel(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ):
-    """Upload a novel text file and create a project."""
+    """Upload a novel text file and create a project. Supports .txt and .docx formats."""
     # Validate file size
     content = await file.read()
     file_size = len(content)
@@ -56,14 +56,32 @@ async def upload_novel(
     if file_size > settings.MAX_FILE_SIZE_MB * 1024 * 1024:
         raise HTTPException(400, f"文件大小超过 {settings.MAX_FILE_SIZE_MB}MB 限制")
 
-    # Decode text
-    try:
-        text = content.decode("utf-8")
-    except UnicodeDecodeError:
+    # Determine file extension and extract text
+    filename = file.filename or ""
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+
+    if ext == 'docx':
+        # Parse Word document
         try:
-            text = content.decode("gbk")
+            import io as _io
+            from docx import Document
+            doc = Document(_io.BytesIO(content))
+            text = '\n'.join(para.text for para in doc.paragraphs if para.text.strip())
+            if not text.strip():
+                raise HTTPException(400, "Word 文档内容为空")
+        except ImportError:
+            raise HTTPException(500, "服务器未安装 python-docx，无法解析 Word 文档")
+        except Exception as e:
+            raise HTTPException(400, f"无法解析 Word 文档: {str(e)}")
+    else:
+        # Decode text file (default: txt)
+        try:
+            text = content.decode("utf-8")
         except UnicodeDecodeError:
-            raise HTTPException(400, "无法解码文件，请上传 UTF-8 或 GBK 编码的文本文件")
+            try:
+                text = content.decode("gbk")
+            except UnicodeDecodeError:
+                raise HTTPException(400, "无法解码文件，请上传 UTF-8 或 GBK 编码的文本文件")
 
     # Split chapters
     from app.chapter_splitter import split_chapters

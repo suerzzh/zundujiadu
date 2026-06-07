@@ -9,6 +9,14 @@ export default function UploadPanel() {
   const handleFile = useCallback(async (file) => {
     if (!file) return
 
+    // Validate file type
+    const validTypes = ['.txt', '.docx']
+    const fileExt = '.' + file.name.split('.').pop().toLowerCase()
+    if (!validTypes.includes(fileExt)) {
+      setError('不支持的文件格式，请上传 .txt 或 .docx 文件')
+      return
+    }
+
     const formData = new FormData()
     formData.append('file', file)
 
@@ -100,11 +108,11 @@ export default function UploadPanel() {
       <div className="upload-text">
         拖拽小说文本文件到此处<br />或点击选择文件
       </div>
-      <div className="upload-hint">支持 .txt 格式，至少 3 个章节</div>
+      <div className="upload-hint">支持 .txt / .docx 格式，至少 3 个章节</div>
       <input
         ref={fileInputRef}
         type="file"
-        accept=".txt"
+        accept=".txt,.docx"
         onChange={handleChange}
         style={{ display: 'none' }}
       />
