@@ -200,7 +200,7 @@ export default function LandingPage({ onEnterApp }) {
             <div className={`lp-step-card lp-reveal`} ref={addRevealRef}>
               <div className="lp-step-num">01</div>
               <h3>上传小说</h3>
-              <p>支持 txt 格式，自动识别中文章回体、数字章节，AI 秒级理解核对人物与事件</p>
+              <p>支持 txt、docx 格式，自动识别中文章回体、数字章节，AI 秒级理解核对人物与事件</p>
               <div className="lp-step-take">Take 1 &mdash; Upload</div>
             </div>
             <div className={`lp-step-card lp-reveal lp-stagger-1`} ref={addRevealRef}>

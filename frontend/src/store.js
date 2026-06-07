@@ -153,7 +153,7 @@ const useStore = create((set, get) => ({
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `novel2script_${projectId}.zip`
+        a.download = `剧本人AI_${projectId}.zip`
         a.click()
         URL.revokeObjectURL(url)
       }
