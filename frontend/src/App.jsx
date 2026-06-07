@@ -218,7 +218,7 @@ export default function App() {
     <div className="app">
       {/* Header */}
       <header className="header">
-        <h1>Novel2Script — AI剧本创作助手</h1>
+        <h1><span className="brand-icon" />剧本人AI — AI剧本创作助手</h1>
         <span className="header-status">
           {pipelineStatus === 'idle' && '等待上传'}
           {pipelineStatus === 'running' && '处理中...'}
