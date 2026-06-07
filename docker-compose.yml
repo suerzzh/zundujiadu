@@ -5,8 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
+    # Internal only: Nginx proxies /api to this service
+    expose:
+      - "8000"
     env_file:
       - .env
     volumes:
@@ -19,7 +20,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       - backend
     restart: unless-stopped
+
