@@ -2,6 +2,8 @@
 
 Manages agent lifecycle: init → execute → output → next.
 Emits SSE events for frontend progress display.
+SSE stage_progress includes elapsed_sec and events_count per spec.
+Accumulates total_cost from LLM logger.
 """
 
 import asyncio
@@ -12,6 +14,7 @@ from datetime import datetime, timezone
 from typing import AsyncGenerator, Callable, Optional
 
 from app.chapter_splitter import split_chapters, Chapter
+from app.llm_logger import llm_logger
 from app.pipeline.extractor import ExtractorAgent
 from app.pipeline.analyzer import AnalyzerAgent
 from app.pipeline.planner import PlannerAgent
@@ -29,6 +32,8 @@ class PipelineOrchestrator:
         self._start_time: float = 0
         self._total_cost: float = 0.0
         self._event_callbacks: list[Callable] = []
+        self._stage_start_time: float = 0  # Track per-stage start time
+        self._events_count: int = 0  # Track events count for extractor
 
     def on_event(self, callback: Callable):
         """Register an SSE event callback."""
@@ -101,6 +106,8 @@ class PipelineOrchestrator:
         total_chapters = len(chapters)
 
         # ── Stage 0: Extractor ──────────────────────────────────
+        self._stage_start_time = time.monotonic()
+        self._events_count = 0
         self._emit_event({
             "event": "stage_started",
             "stage": "extractor",
@@ -111,12 +118,15 @@ class PipelineOrchestrator:
             extractor = ExtractorAgent(self.project_id)
 
             def extractor_progress(stage, chapter, total, status):
+                self._events_count += 1
                 self._emit_event({
                     "event": "stage_progress",
                     "stage": stage,
                     "chapter": chapter,
                     "total": total,
                     "chapter_status": status,
+                    "elapsed_sec": round(time.monotonic() - self._stage_start_time, 1),
+                    "events_count": self._events_count,
                 })
 
             events_result = await extractor.execute(
@@ -127,19 +137,22 @@ class PipelineOrchestrator:
             self._emit_event({
                 "event": "stage_completed",
                 "stage": "extractor",
-                "duration_sec": round(time.monotonic() - self._start_time, 1),
+                "duration_sec": round(time.monotonic() - self._stage_start_time, 1),
                 "outputs": {"events_json": f"workspace/{self.project_id}/10_events/events.json"},
             })
         except Exception as e:
             self._emit_event({
                 "event": "stage_failed",
                 "stage": "extractor",
+                "chapter": 0,
                 "error": str(e),
+                "retry_count": 0,
                 "recoverable": True,
             })
             return
 
         # ── Stage 1: Analyzer ───────────────────────────────────
+        self._stage_start_time = time.monotonic()
         self._emit_event({
             "event": "stage_started",
             "stage": "analyzer",
@@ -152,19 +165,22 @@ class PipelineOrchestrator:
             self._emit_event({
                 "event": "stage_completed",
                 "stage": "analyzer",
-                "duration_sec": round(time.monotonic() - self._start_time, 1),
+                "duration_sec": round(time.monotonic() - self._stage_start_time, 1),
                 "outputs": {"analysis_json": f"workspace/{self.project_id}/20_analysis/analysis.json"},
             })
         except Exception as e:
             self._emit_event({
                 "event": "stage_failed",
                 "stage": "analyzer",
+                "chapter": 0,
                 "error": str(e),
+                "retry_count": 0,
                 "recoverable": True,
             })
             return
 
         # ── Stage 2: Planner ───────────────────────────────────
+        self._stage_start_time = time.monotonic()
         self._emit_event({
             "event": "stage_started",
             "stage": "planner",
@@ -177,19 +193,23 @@ class PipelineOrchestrator:
             self._emit_event({
                 "event": "stage_completed",
                 "stage": "planner",
-                "duration_sec": round(time.monotonic() - self._start_time, 1),
+                "duration_sec": round(time.monotonic() - self._stage_start_time, 1),
                 "outputs": {"plan_json": f"workspace/{self.project_id}/30_plan/plan.json"},
             })
         except Exception as e:
             self._emit_event({
                 "event": "stage_failed",
                 "stage": "planner",
+                "chapter": 0,
                 "error": str(e),
+                "retry_count": 0,
                 "recoverable": True,
             })
             return
 
         # ── Stage 3: Writer ────────────────────────────────────
+        self._stage_start_time = time.monotonic()
+        self._events_count = 0
         self._emit_event({
             "event": "stage_started",
             "stage": "writer",
@@ -200,12 +220,15 @@ class PipelineOrchestrator:
             writer = WriterAgent(self.project_id)
 
             def writer_progress(stage, chapter, total, status):
+                self._events_count += 1
                 self._emit_event({
                     "event": "stage_progress",
                     "stage": stage,
                     "chapter": chapter,
                     "total": total,
                     "chapter_status": status,
+                    "elapsed_sec": round(time.monotonic() - self._stage_start_time, 1),
+                    "events_count": self._events_count,
                 })
 
             writer_results = await writer.execute(
@@ -215,19 +238,22 @@ class PipelineOrchestrator:
             self._emit_event({
                 "event": "stage_completed",
                 "stage": "writer",
-                "duration_sec": round(time.monotonic() - self._start_time, 1),
+                "duration_sec": round(time.monotonic() - self._stage_start_time, 1),
                 "outputs": {"scripts_dir": f"workspace/{self.project_id}/40_scripts/"},
             })
         except Exception as e:
             self._emit_event({
                 "event": "stage_failed",
                 "stage": "writer",
+                "chapter": 0,
                 "error": str(e),
+                "retry_count": 0,
                 "recoverable": True,
             })
             return
 
         # ── Stage 4: Reviewer + Assembler ──────────────────────
+        self._stage_start_time = time.monotonic()
         self._emit_event({
             "event": "stage_started",
             "stage": "reviewer",
@@ -246,21 +272,25 @@ class PipelineOrchestrator:
             self._emit_event({
                 "event": "stage_completed",
                 "stage": "reviewer",
-                "duration_sec": round(time.monotonic() - self._start_time, 1),
+                "duration_sec": round(time.monotonic() - self._stage_start_time, 1),
                 "outputs": {"review_json": f"workspace/{self.project_id}/50_review/review.json"},
             })
         except Exception as e:
             self._emit_event({
                 "event": "stage_failed",
                 "stage": "reviewer",
+                "chapter": 0,
                 "error": str(e),
+                "retry_count": 0,
                 "recoverable": True,
             })
             return
 
         # ── Pipeline Complete ───────────────────────────────────
         total_duration = round(time.monotonic() - self._start_time, 1)
-        self._emit_event({
+        # A14: Accumulate total_cost from LLM logger
+        self._total_cost = llm_logger.get_total_cost(self.project_id)
+        pipeline_complete_event = {
             "event": "pipeline_completed",
             "outputs": [
                 "script.yaml",
@@ -271,7 +301,19 @@ class PipelineOrchestrator:
             ],
             "total_duration_sec": total_duration,
             "total_cost": self._total_cost,
-        })
+        }
+        # Include review status if available
+        try:
+            review_data = workspace_manager.read_json(
+                self.project_id, "50_review", "review.json"
+            )
+            if review_data.get("review_status"):
+                pipeline_complete_event["review_status"] = review_data["review_status"]
+            if review_data.get("overall_score"):
+                pipeline_complete_event["review_score"] = review_data["overall_score"]
+        except Exception:
+            pass
+        self._emit_event(pipeline_complete_event)
 
     async def regenerate_episode(
         self,

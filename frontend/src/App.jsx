@@ -61,7 +61,9 @@ function PlanView() {
               <th>集号</th>
               <th>标题</th>
               <th>类型</th>
+              <th>原文章节</th>
               <th>钩子</th>
+              <th>爽点</th>
               <th>情绪</th>
             </tr>
           </thead>
@@ -71,7 +73,9 @@ function PlanView() {
                 <td>{ep.episode}</td>
                 <td>{ep.title}</td>
                 <td><span className={`tag tag-${ep.episode_type}`}>{ep.episode_type}</span></td>
+                <td style={{ fontSize: 12 }}>{ep.source_chapters?.join(',') || '-'}</td>
                 <td style={{ fontSize: 12 }}>{ep.hook}</td>
+                <td style={{ fontSize: 12, color: 'var(--primary-light)' }}>{ep.satisfaction_points?.join('、') || '-'}</td>
                 <td>{(ep.emotional_intensity * 100).toFixed(0)}%</td>
               </tr>
             ))}
@@ -80,21 +84,31 @@ function PlanView() {
       </div>
 
       {/* Emotion curve */}
-      {plan.emotion_curve?.length > 0 && (
+      {(plan.emotion_curve?.length > 0 || plan.episodes?.length > 0) && (
         <div className="card">
           <div className="card-title">情绪曲线</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
-            {plan.emotion_curve.map((point, i) => (
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 100 }}>
+            {(plan.emotion_curve?.length > 0 ? plan.emotion_curve : plan.episodes?.map(ep => ({
+              episode: ep.episode,
+              intensity: ep.emotional_intensity || 0.5,
+              label: ep.episode_type || '',
+            })) || []).map((point, i) => (
               <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+                <div style={{ fontSize: 10, color: 'var(--primary-light)', marginBottom: 2 }}>
+                  {point.label || `${(point.intensity * 100).toFixed(0)}%`}
+                </div>
                 <div
                   style={{
-                    height: `${point.intensity * 100}%`,
-                    background: 'var(--primary)',
+                    height: `${Math.max(point.intensity * 80, 4)}px`,
+                    background: point.intensity >= 0.8 ? 'var(--danger, #ef4444)' :
+                               point.intensity >= 0.6 ? 'var(--primary)' :
+                               point.intensity >= 0.4 ? 'var(--warning, #f59e0b)' : 'var(--text-muted)',
                     borderRadius: '2px 2px 0 0',
                     minHeight: 4,
+                    transition: 'height 0.3s',
                   }}
                 />
-                <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{point.episode}</div>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>第{point.episode}集</div>
               </div>
             ))}
           </div>
@@ -117,7 +131,10 @@ function PlanView() {
 }
 
 export default function App() {
-  const { projectId, pipelineStatus, error, warnings, clearError, chapterCount } = useStore()
+  const {
+    projectId, pipelineStatus, error, warnings, clearError, chapterCount,
+    failedStage, retryFailedStage, totalDurationSec, totalCost, exportOutputs,
+  } = useStore()
 
   return (
     <div className="app">
@@ -130,13 +147,31 @@ export default function App() {
           {pipelineStatus === 'completed' && `已完成 · ${chapterCount}章`}
           {pipelineStatus === 'failed' && '处理失败'}
         </span>
+        {/* B7: Export button */}
+        {pipelineStatus === 'completed' && (
+          <button className="btn btn-primary" style={{ marginLeft: 12, fontSize: 12 }} onClick={exportOutputs}>
+            导出
+          </button>
+        )}
       </header>
 
-      {/* Error banner */}
+      {/* Error banner with B6: retry button */}
       {error && (
         <div className="error-banner">
           <span className="error-message">{error}</span>
+          {failedStage && (
+            <button className="btn btn-sm btn-primary" onClick={retryFailedStage} style={{ marginRight: 8 }}>
+              重试 {failedStage}
+            </button>
+          )}
           <button className="btn btn-sm btn-danger" onClick={clearError}>关闭</button>
+        </div>
+      )}
+
+      {/* B8: Pipeline completion stats */}
+      {pipelineStatus === 'completed' && totalDurationSec != null && (
+        <div className="warning-banner" style={{ background: 'var(--success-bg, #e8f5e9)', color: 'var(--success, #22c55e)' }}>
+          Pipeline 完成 — 总耗时: {totalDurationSec}s | 总成本: ¥{totalCost?.toFixed(2) || '0.00'}
         </div>
       )}
 

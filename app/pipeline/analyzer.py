@@ -1,6 +1,7 @@
 """Analyzer Agent — adaptation analysis based on event table.
 
 Stage 1: Reads events.json (NOT raw novel), outputs analysis.json to workspace/20_analysis/.
+Injects references/01-adaptation-system.md into system prompt.
 """
 
 from pathlib import Path
@@ -11,6 +12,7 @@ from app.pipeline.base import BaseAgent
 from app.schemas import Analysis
 from app.workspace import workspace_manager
 
+REFERENCES_DIR = Path(__file__).parent.parent / "references"
 PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "analyzer.md"
 
 
@@ -23,6 +25,15 @@ class AnalyzerAgent(BaseAgent):
         super().__init__(project_id)
         with open(PROMPT_PATH, "r", encoding="utf-8") as f:
             self.system_prompt = f.read().strip()
+
+        # A10: Inject references/01-adaptation-system.md
+        ref_path = REFERENCES_DIR / "01-adaptation-system.md"
+        if ref_path.exists():
+            try:
+                ref_content = ref_path.read_text(encoding="utf-8")
+                self.system_prompt += f"\n\n## 改编分析方法论参考\n{ref_content}"
+            except Exception:
+                pass
 
     async def execute(
         self,
@@ -48,8 +59,8 @@ class AnalyzerAgent(BaseAgent):
             {"role": "user", "content": f"以下是小说的事件表：\n\n{events_summary}"},
         ]
 
-        # Retry logic
-        for attempt in range(2):
+        # Retry logic: spec requires 2 retries for stage 1/2 = 3 total attempts
+        for attempt in range(3):
             try:
                 analysis = await llm_client.call_with_model(
                     messages=messages,
@@ -60,8 +71,8 @@ class AnalyzerAgent(BaseAgent):
                 )
                 break
             except Exception as e:
-                if attempt == 1:
-                    raise RuntimeError(f"Analyzer failed after retry: {e}")
+                if attempt >= 2:
+                    raise RuntimeError(f"Analyzer failed after 2 retries: {e}")
                 # Retry with modified prompt
                 messages.append({"role": "user", "content": "请重新分析，确保输出完整JSON。"})
 

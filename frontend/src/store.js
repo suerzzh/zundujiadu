@@ -18,6 +18,14 @@ const useStore = create((set, get) => ({
   },
   thinkingText: '',
 
+  // B8: Pipeline completion stats
+  totalDurationSec: null,
+  totalCost: null,
+
+  // B6: Failed stage info for retry
+  failedStage: null,
+  failedError: null,
+
   // Data
   events: null,
   analysis: null,
@@ -30,6 +38,7 @@ const useStore = create((set, get) => ({
   // UI state
   activeTab: 'events', // events / analysis / plan / review / continuity
   activeChapter: null,
+  currentEpisode: null,
   error: null,
 
   // Actions
@@ -37,6 +46,8 @@ const useStore = create((set, get) => ({
     set({ projectId, chapterCount, warnings }),
 
   setPipelineStatus: (status) => set({ pipelineStatus: status }),
+
+  setCurrentEpisode: (ep) => set({ currentEpisode: ep }),
 
   handleSSEEvent: (event) => {
     const type = event.event
@@ -51,6 +62,8 @@ const useStore = create((set, get) => ({
           [stage]: { status: 'running', progress: 0, total: event.total_chapters || 1 },
         },
         thinkingText: _getThinkingText(stage),
+        failedStage: null,
+        failedError: null,
       }))
     }
 
@@ -85,6 +98,9 @@ const useStore = create((set, get) => ({
         },
         error: `${stage} 阶段失败: ${event.error}`,
         thinkingText: '',
+        // B6: Store failed stage info for retry button
+        failedStage: stage,
+        failedError: event.error,
       }))
     }
 
@@ -92,9 +108,78 @@ const useStore = create((set, get) => ({
       set({
         pipelineStatus: 'completed',
         thinkingText: '',
+        failedStage: null,
+        failedError: null,
+        // B8: Store total duration and cost
+        totalDurationSec: event.total_duration_sec,
+        totalCost: event.total_cost,
       })
       // Fetch all data
       get().fetchAlldata()
+    }
+  },
+
+  // B6: Retry failed stage
+  retryFailedStage: async () => {
+    const { projectId, failedStage } = get()
+    if (!projectId || !failedStage) return
+
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/retry/${failedStage}`, {
+        method: 'POST',
+      })
+      if (resp.ok) {
+        set({ failedStage: null, failedError: null, error: null })
+        // Re-connect SSE to monitor the retry
+        get().connectSSE()
+      }
+    } catch (e) {
+      console.error('Retry failed:', e)
+    }
+  },
+
+  // B7: Export all outputs
+  exportOutputs: async () => {
+    const { projectId } = get()
+    if (!projectId) return
+
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/export`)
+      if (resp.ok) {
+        const blob = await resp.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `novel2script_${projectId}.zip`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch (e) {
+      console.error('Export failed:', e)
+    }
+  },
+
+  connectSSE: () => {
+    const { projectId } = get()
+    if (!projectId) return
+
+    const evtSource = new EventSource(`/api/projects/${projectId}/convert/stream`)
+
+    // Use typed event listeners to match backend SSE event types
+    const eventTypes = ['stage_started', 'stage_progress', 'stage_completed', 'stage_failed', 'pipeline_completed']
+    eventTypes.forEach((type) => {
+      evtSource.addEventListener(type, (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          get().handleSSEEvent({ event: type, ...data })
+        } catch (err) {
+          console.error('SSE parse error:', err)
+        }
+      })
+    })
+
+    evtSource.onerror = () => {
+      evtSource.close()
     }
   },
 
@@ -146,6 +231,10 @@ const useStore = create((set, get) => ({
       reviewer: { status: 'pending', progress: 0, total: 0 },
     },
     thinkingText: '',
+    totalDurationSec: null,
+    totalCost: null,
+    failedStage: null,
+    failedError: null,
     events: null,
     analysis: null,
     plan: null,
@@ -155,6 +244,7 @@ const useStore = create((set, get) => ({
     chapters: [],
     activeTab: 'events',
     activeChapter: null,
+    currentEpisode: null,
     error: null,
   }),
 }))

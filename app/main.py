@@ -1,13 +1,15 @@
 """FastAPI application — main entry point."""
 
+import io
 import json
+import zipfile
 import uuid
 from typing import Optional
 
 import aiofiles
 from fastapi import FastAPI, File, HTTPException, UploadFile, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -244,6 +246,55 @@ async def get_chapters(project_id: str):
         }
     except FileNotFoundError:
         raise HTTPException(404, "小说未上传")
+
+
+# ── Script Edit ───────────────────────────────────────────────
+
+class ScriptUpdateBody(BaseModel):
+    content: str
+
+
+@app.put("/api/projects/{project_id}/script")
+async def update_script(project_id: str, body: ScriptUpdateBody):
+    """Save edited script YAML back to workspace."""
+    if not workspace_manager.workspace_exists(project_id):
+        raise HTTPException(404, f"项目 {project_id} 不存在")
+
+    workspace_manager.write_file(
+        project_id, "90_output", "script.yaml", body.content
+    )
+    return {"status": "ok"}
+
+
+# ── Export (B7) ────────────────────────────────────────────────
+
+@app.get("/api/projects/{project_id}/export")
+async def export_outputs(project_id: str):
+    """Export all pipeline outputs as a ZIP file."""
+    if not workspace_manager.workspace_exists(project_id):
+        raise HTTPException(404, f"项目 {project_id} 不存在")
+
+    # Create ZIP in memory
+    buffer = io.BytesIO()
+    project_dir = workspace_manager.get_project_dir(project_id)
+
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # Export script.yaml
+        for subdir in ["10_events", "20_analysis", "30_plan", "40_scripts", "50_review", "60_continuity", "90_output"]:
+            subdir_path = project_dir / subdir
+            if subdir_path.exists():
+                for file_path in subdir_path.iterdir():
+                    if file_path.is_file():
+                        zf.write(file_path, f"{subdir}/{file_path.name}")
+
+    buffer.seek(0)
+    return Response(
+        content=buffer.read(),
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f"attachment; filename=novel2script_{project_id}.zip"
+        },
+    )
 
 
 # ── Health ─────────────────────────────────────────────────────

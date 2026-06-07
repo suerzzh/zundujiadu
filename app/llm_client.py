@@ -14,8 +14,8 @@ from app.llm_logger import llm_logger, LLMTimer
 T = TypeVar("T", bound=BaseModel)
 
 # DeepSeek pricing (approximate, per 1M tokens)
-INPUT_COST_PER_1K = 0.001  # CNY per 1K input tokens
-OUTPUT_COST_PER_1K = 0.002  # CNY per 1K output tokens
+INPUT_COST_PER_1M = 1.0  # CNY per 1M input tokens (≈0.001 per 1K)
+OUTPUT_COST_PER_1M = 2.0  # CNY per 1M output tokens (≈0.002 per 1K)
 
 
 class LLMError(Exception):
@@ -43,8 +43,29 @@ class LLMClient:
 
     def __init__(self):
         self.api_key = settings.DEEPSEEK_API_KEY
+        self.backup_key = settings.DEEPSEEK_API_KEY_BACKUP
         self.base_url = settings.DEEPSEEK_BASE_URL
         self.model = settings.DEEPSEEK_MODEL
+        self._using_backup = False
+
+    async def _make_request(self, api_key: str, messages: list[dict], temperature: float, max_tokens: int) -> httpx.Response:
+        """Make a single API request with the given key. Returns the raw response."""
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            return await client.post(
+                f"{self.base_url}/v1/chat/completions",
+                headers=headers,
+                json=payload,
+            )
 
     async def call(
         self,
@@ -55,40 +76,56 @@ class LLMClient:
         temperature: float = 0.7,
         max_tokens: int = 4096,
     ) -> str:
-        """Make a raw LLM API call with logging."""
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
+        """Make a raw LLM API call with logging.
 
-        with LLMTimer() as timer:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    f"{self.base_url}/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
+        Tries primary API key first, then falls back to backup key on 401/403.
+        """
+        keys_to_try = [self.api_key]
+        if self.backup_key and self.backup_key != self.api_key:
+            keys_to_try.append(self.backup_key)
+
+        last_response = None
+        for key_index, key in enumerate(keys_to_try):
+            with LLMTimer() as timer:
+                response = await self._make_request(key, messages, temperature, max_tokens)
+
+            # Success
+            if response.status_code == 200:
+                if key_index > 0:
+                    self.api_key = key
+                    self._using_backup = True
+                break
+
+            # Auth errors: try next key
+            if response.status_code in (401, 403):
+                last_response = response
+                continue
+
+            # Rate limit
+            if response.status_code == 429:
+                raise RateLimitError("Rate limit exceeded")
+            # Server error
+            if response.status_code >= 500:
+                raise LLMServerError(f"Server error: {response.status_code}")
+            # Other errors
+            last_response = response
+            break
+
+        # If we exhausted all keys without success
+        if last_response is not None and last_response.status_code != 200:
+            if last_response.status_code in (401, 403):
+                raise LLMError(
+                    f"Authentication failed with all available API keys (tried {len(keys_to_try)}). "
+                    "Please set a valid DEEPSEEK_API_KEY in your .env file."
                 )
-
-        # Parse response
-        if response.status_code == 429:
-            raise RateLimitError("Rate limit exceeded")
-        if response.status_code >= 500:
-            raise LLMServerError(f"Server error: {response.status_code}")
-        if response.status_code != 200:
-            raise LLMError(f"API error: {response.status_code} {response.text}")
+            raise LLMError(f"API error: {last_response.status_code} {last_response.text}")
 
         data = response.json()
         content = data["choices"][0]["message"]["content"]
         usage = data.get("usage", {})
         token_in = usage.get("prompt_tokens", 0)
         token_out = usage.get("completion_tokens", 0)
-        cost = (token_in * INPUT_COST_PER_1K + token_out * OUTPUT_COST_PER_1K) / 1000
+        cost = (token_in * INPUT_COST_PER_1M + token_out * OUTPUT_COST_PER_1M) / 1_000_000
 
         llm_logger.log_call(
             project_id=project_id,

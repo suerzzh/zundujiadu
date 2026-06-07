@@ -41,13 +41,22 @@ class RetryPolicy:
         ErrorCategory.UNKNOWN: 1,
     }
 
-    # Base delays (seconds) per category
+    # Base delays (seconds) per category — spec requires 1s/3s/9s for rate limit
     BASE_DELAYS = {
-        ErrorCategory.RATE_LIMIT: 1.0,   # 1s, 2s, 4s
-        ErrorCategory.SERVER_ERROR: 2.0,  # 2s, 4s
+        ErrorCategory.RATE_LIMIT: 1.0,   # 1s, 3s, 9s (exponential with base 3)
+        ErrorCategory.SERVER_ERROR: 2.0,  # 2s, 6s
         ErrorCategory.OUTPUT_ERROR: 0.5,
         ErrorCategory.DISK_ERROR: 0,
         ErrorCategory.UNKNOWN: 1.0,
+    }
+
+    # Exponential base per category
+    EXP_BASE = {
+        ErrorCategory.RATE_LIMIT: 3.0,   # 1s * 3^0=1s, 1s * 3^1=3s, 1s * 3^2=9s
+        ErrorCategory.SERVER_ERROR: 3.0,
+        ErrorCategory.OUTPUT_ERROR: 2.0,
+        ErrorCategory.DISK_ERROR: 0,
+        ErrorCategory.UNKNOWN: 2.0,
     }
 
     @classmethod
@@ -73,7 +82,8 @@ class RetryPolicy:
                     raise
 
                 base_delay = cls.BASE_DELAYS[category]
-                delay = base_delay * (2 ** attempt)
+                exp_base = cls.EXP_BASE[category]
+                delay = base_delay * (exp_base ** attempt)
 
                 if delay > 0:
                     await asyncio.sleep(delay)

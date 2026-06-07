@@ -47,10 +47,16 @@ class WorkspaceManager:
     # ── Lifecycle ──────────────────────────────────────────────
 
     def create_workspace(self, project_id: str) -> Path:
-        """Create a new workspace with all sub-directories."""
+        """Create a new workspace with all sub-directories and initial files."""
         project_dir = self.get_project_dir(project_id)
         for subdir in WORKSPACE_DIRS:
             (project_dir / subdir).mkdir(parents=True, exist_ok=True)
+
+        # Initialize empty continuity.json so Writer can read it on first run
+        cont_path = project_dir / "60_continuity" / "continuity.json"
+        if not cont_path.exists():
+            self.write_json(project_id, "60_continuity", "continuity.json", {"raw": [], "summaries": []})
+
         return project_dir
 
     def workspace_exists(self, project_id: str) -> bool:
@@ -65,7 +71,12 @@ class WorkspaceManager:
     # ── File I/O with atomic writes ────────────────────────────
 
     def write_file(self, project_id: str, subdir: str, filename: str, content: str) -> Path:
-        """Write a file atomically: write to .tmp then os.replace."""
+        """Write a file atomically: write to .tmp then os.replace + post-write validation.
+
+        After writing, validates the file by deserializing it (for JSON files).
+        If validation fails, deletes the file and raises an error.
+        Disk-full and permission errors are raised immediately without retry.
+        """
         target_dir = self.get_project_dir(project_id) / subdir
         target_dir.mkdir(parents=True, exist_ok=True)
         target_path = target_dir / filename
@@ -75,11 +86,32 @@ class WorkspaceManager:
             with open(tmp_path, "w", encoding="utf-8") as f:
                 f.write(content)
             os.replace(str(tmp_path), str(target_path))
+        except (OSError, PermissionError) as e:
+            # Disk-full / permission errors: clean up and raise immediately (no retry per spec)
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+            raise IOError(f"Workspace write failed (disk/permission): {e}")
         except Exception:
             # Clean up tmp file on failure
             if tmp_path.exists():
                 tmp_path.unlink()
             raise
+
+        # Post-write validation: verify file can be read back
+        try:
+            with open(target_path, "r", encoding="utf-8") as f:
+                written_content = f.read()
+            # For JSON files, validate deserialization
+            if filename.endswith(".json"):
+                json.loads(written_content)
+        except (json.JSONDecodeError, Exception) as e:
+            # Validation failed — delete the corrupted file
+            if target_path.exists():
+                target_path.unlink()
+            raise IOError(f"Post-write validation failed for {filename}: {e}")
 
         return target_path
 
