@@ -1,4 +1,4 @@
-# Novel2Script — AI 剧本创作助手
+# 剧本人AI- AI剧本创作助手
 
 > 将中文小说自动转换为结构化影视剧本，基于 LLM 驱动的多阶段 Pipeline
 
