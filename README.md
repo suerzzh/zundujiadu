@@ -205,7 +205,7 @@ novel2script/
 
 | 分支名       | 负责人 |
 | ------------ | ------ |
-| feature-zmw  | 智明威 |
+| feature-zmw  | 智铭威 |
 | feature-zhan | 占付龙 |
 
 ---
