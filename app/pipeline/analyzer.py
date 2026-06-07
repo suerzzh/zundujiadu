@@ -64,13 +64,26 @@ class AnalyzerAgent(BaseAgent):
         # Retry logic: spec requires 2 retries for stage 1/2 = 3 total attempts
         for attempt in range(3):
             try:
-                analysis = await llm_client.call_with_model(
-                    messages=messages,
-                    output_model=Analysis,
-                    project_id=self.project_id,
-                    stage=self.stage_name,
-                    temperature=0.5,
-                )
+                if self._stream_callback:
+                    # Streaming mode: collect full text then parse
+                    full_content = ""
+                    async for chunk in llm_client.stream_call(
+                        messages=messages,
+                        project_id=self.project_id,
+                        stage=self.stage_name,
+                        temperature=0.5,
+                    ):
+                        full_content += chunk
+                        self._stream_callback(self.stage_name, chunk)
+                    analysis = llm_client._parse_output(full_content, Analysis)
+                else:
+                    analysis = await llm_client.call_with_model(
+                        messages=messages,
+                        output_model=Analysis,
+                        project_id=self.project_id,
+                        stage=self.stage_name,
+                        temperature=0.5,
+                    )
                 break
             except Exception as e:
                 print(f"[Analyzer] Attempt {attempt + 1} failed: {type(e).__name__}: {e}")

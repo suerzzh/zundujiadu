@@ -9,7 +9,7 @@ const STAGE_LABELS = {
 }
 
 export default function ProgressBar() {
-  const { stageProgress, thinkingText } = useStore()
+  const { stageProgress, thinkingText, streamingText, streamingStage } = useStore()
 
   return (
     <div className="progress-container">
@@ -39,7 +39,15 @@ export default function ProgressBar() {
           </div>
         )
       })}
-      {thinkingText && (
+      {streamingText && (
+        <div className="progress-streaming">
+          <div className="progress-streaming-label">
+            {STAGE_LABELS[streamingStage] || '处理中'} 实时输出
+          </div>
+          <pre className="progress-streaming-content">{streamingText.slice(-2000)}</pre>
+        </div>
+      )}
+      {!streamingText && thinkingText && (
         <div className="progress-thinking">{thinkingText}</div>
       )}
     </div>

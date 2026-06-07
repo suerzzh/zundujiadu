@@ -61,14 +61,28 @@ class ExtractorAgent(BaseAgent):
 
                 for attempt in range(RetryPolicy.MAX_RETRIES[ErrorCategory.RATE_LIMIT] + 1):
                     try:
-                        event = await llm_client.call_with_model(
-                            messages=messages,
-                            output_model=Event,
-                            project_id=self.project_id,
-                            stage=self.stage_name,
-                            chapter=chapter["number"],
-                            temperature=0.3,
-                        )
+                        if self._stream_callback:
+                            # Streaming mode: collect full text then parse
+                            full_content = ""
+                            async for chunk in llm_client.stream_call(
+                                messages=messages,
+                                project_id=self.project_id,
+                                stage=self.stage_name,
+                                chapter=chapter["number"],
+                                temperature=0.3,
+                            ):
+                                full_content += chunk
+                                self._stream_callback(self.stage_name, chunk)
+                            event = llm_client._parse_output(full_content, Event)
+                        else:
+                            event = await llm_client.call_with_model(
+                                messages=messages,
+                                output_model=Event,
+                                project_id=self.project_id,
+                                stage=self.stage_name,
+                                chapter=chapter["number"],
+                                temperature=0.3,
+                            )
                         break
                     except RateLimitError:
                         if attempt >= RetryPolicy.MAX_RETRIES[ErrorCategory.RATE_LIMIT]:

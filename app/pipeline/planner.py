@@ -66,13 +66,26 @@ class PlannerAgent(BaseAgent):
         # Retry logic: spec requires 2 retries for stage 1/2 = 3 total attempts
         for attempt in range(3):
             try:
-                plan = await llm_client.call_with_model(
-                    messages=messages,
-                    output_model=EpisodePlan,
-                    project_id=self.project_id,
-                    stage=self.stage_name,
-                    temperature=0.6,
-                )
+                if self._stream_callback:
+                    # Streaming mode: collect full text then parse
+                    full_content = ""
+                    async for chunk in llm_client.stream_call(
+                        messages=messages,
+                        project_id=self.project_id,
+                        stage=self.stage_name,
+                        temperature=0.6,
+                    ):
+                        full_content += chunk
+                        self._stream_callback(self.stage_name, chunk)
+                    plan = llm_client._parse_output(full_content, EpisodePlan)
+                else:
+                    plan = await llm_client.call_with_model(
+                        messages=messages,
+                        output_model=EpisodePlan,
+                        project_id=self.project_id,
+                        stage=self.stage_name,
+                        temperature=0.6,
+                    )
                 # Validate plan after generation
                 validation_issues = self._validate_plan(plan, events_data)
                 if not validation_issues:

@@ -63,6 +63,10 @@ export default function UploadPanel() {
         eventSource.close()
       })
 
+      eventSource.addEventListener('llm_chunk', (e) => {
+        handleSSEEvent({ event: 'llm_chunk', ...JSON.parse(e.data) })
+      })
+
       eventSource.onerror = () => {
         eventSource.close()
       }

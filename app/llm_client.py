@@ -1,9 +1,10 @@
-"""LLM Client — DeepSeek V4-Pro API wrapper with logging and retry."""
+"""LLM Client — DeepSeek V4-Pro API wrapper with logging, retry, and streaming."""
 
 import asyncio
 import json
 import re
-from typing import Optional, Type, TypeVar
+import time
+from typing import AsyncGenerator, Optional, Type, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -139,6 +140,127 @@ class LLMClient:
         )
 
         return content
+
+    async def stream_call(
+        self,
+        messages: list[dict],
+        project_id: str,
+        stage: str,
+        chapter: Optional[int] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
+    ) -> AsyncGenerator[str, None]:
+        """Stream LLM output token by token.
+
+        Yields content delta strings as they arrive from the API.
+        Also logs the full call after streaming completes.
+        Falls back to non-streaming call if streaming fails.
+        """
+        keys_to_try = [self.api_key]
+        if self.backup_key and self.backup_key != self.api_key:
+            keys_to_try.append(self.backup_key)
+
+        for key_index, key in enumerate(keys_to_try):
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "stream": True,
+            }
+
+            start_time = time.monotonic()
+            full_content = ""
+            token_in = 0
+            token_out = 0
+            success = False
+
+            try:
+                async with httpx.AsyncClient(timeout=180.0) as client:
+                    async with client.stream(
+                        "POST",
+                        f"{self.base_url}/v1/chat/completions",
+                        headers=headers,
+                        json=payload,
+                    ) as response:
+                        if response.status_code in (401, 403):
+                            continue  # Try next key
+                        if response.status_code == 429:
+                            raise RateLimitError("Rate limit exceeded")
+                        if response.status_code >= 500:
+                            raise LLMServerError(f"Server error: {response.status_code}")
+                        if response.status_code != 200:
+                            error_text = await response.aread()
+                            raise LLMError(f"API error: {response.status_code} {error_text.decode()}")
+
+                        # Auth success with backup key
+                        if key_index > 0:
+                            self.api_key = key
+                            self._using_backup = True
+
+                        async for line in response.aiter_lines():
+                            line = line.strip()
+                            if not line or not line.startswith("data: "):
+                                continue
+                            data_str = line[6:]  # Remove "data: " prefix
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                                # Extract usage from final chunk if present
+                                usage = chunk.get("usage")
+                                if usage:
+                                    token_in = usage.get("prompt_tokens", 0)
+                                    token_out = usage.get("completion_tokens", 0)
+                                delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    full_content += content
+                                    yield content
+                            except json.JSONDecodeError:
+                                continue
+
+                        success = True
+
+            except (RateLimitError, LLMServerError, LLMError):
+                raise
+            except Exception as e:
+                # Streaming failed — fall back to non-streaming
+                if not full_content:
+                    non_stream_result = await self.call(
+                        messages, project_id, stage, chapter, temperature, max_tokens
+                    )
+                    yield non_stream_result
+                    return
+
+            if success:
+                # Log the call
+                latency_ms = int((time.monotonic() - start_time) * 1000)
+                # Estimate tokens if usage not provided
+                if token_out == 0:
+                    token_out = len(full_content) // 2  # Rough CJK estimate
+                cost = (token_in * INPUT_COST_PER_1M + token_out * OUTPUT_COST_PER_1M) / 1_000_000
+                llm_logger.log_call(
+                    project_id=project_id,
+                    stage=stage,
+                    chapter=chapter,
+                    latency_ms=latency_ms,
+                    token_in=token_in,
+                    token_out=token_out,
+                    cost_cny=cost,
+                    status="success",
+                )
+                return
+
+        # All keys exhausted
+        raise LLMError(
+            f"Authentication failed with all available API keys (tried {len(keys_to_try)}). "
+            "Please set a valid DEEPSEEK_API_KEY in your .env file."
+        )
 
     async def call_with_model(
         self,

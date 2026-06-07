@@ -258,7 +258,11 @@ class WriterAgent(BaseAgent):
         return ""
 
     async def _write_episode(self, context: dict, ep_num: int) -> Optional[str]:
-        """Call LLM to write a single episode using RetryPolicy."""
+        """Call LLM to write a single episode using RetryPolicy.
+
+        Uses streaming when a stream_callback is set, otherwise falls back to
+        non-streaming call for backward compatibility.
+        """
         # Build user message
         user_parts = [
             f"## 当前集规划\n{json.dumps(context['episode_plan'], ensure_ascii=False, indent=2)}",
@@ -292,16 +296,31 @@ class WriterAgent(BaseAgent):
         # A7: Classified retry via RetryPolicy
         for attempt in range(RetryPolicy.MAX_RETRIES[ErrorCategory.RATE_LIMIT] + 1):
             try:
-                content = await llm_client.call(
-                    messages=messages,
-                    project_id=self.project_id,
-                    stage=self.stage_name,
-                    chapter=ep_num,
-                    temperature=0.7,
-                    max_tokens=4096,
-                )
-                # Clean up YAML output
-                content = self._clean_yaml_output(content)
+                if self._stream_callback:
+                    # Streaming mode: collect chunks and forward to callback
+                    full_content = ""
+                    async for chunk in llm_client.stream_call(
+                        messages=messages,
+                        project_id=self.project_id,
+                        stage=self.stage_name,
+                        chapter=ep_num,
+                        temperature=0.7,
+                        max_tokens=4096,
+                    ):
+                        full_content += chunk
+                        self._stream_callback(self.stage_name, chunk)
+                    content = self._clean_yaml_output(full_content)
+                else:
+                    # Non-streaming mode (backward compatible)
+                    content = await llm_client.call(
+                        messages=messages,
+                        project_id=self.project_id,
+                        stage=self.stage_name,
+                        chapter=ep_num,
+                        temperature=0.7,
+                        max_tokens=4096,
+                    )
+                    content = self._clean_yaml_output(content)
                 return content
             except RateLimitError:
                 if attempt >= RetryPolicy.MAX_RETRIES[ErrorCategory.RATE_LIMIT]:
