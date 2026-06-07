@@ -162,6 +162,7 @@
 .lp-hero h1 {
   font-family: var(--lp-font-heading); font-size: clamp(40px, 5vw, 64px); font-weight: 700;
   line-height: 1.15; color: var(--lp-fg); max-width: 900px; margin-bottom: 24px; position: relative; z-index: 1;
+  white-space: nowrap;
 }
 .lp-hero-subtitle {
   font-size: clamp(16px, 2vw, 20px); color: var(--lp-muted); max-width: 700px;
