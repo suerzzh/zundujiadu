@@ -302,3 +302,30 @@ async def export_outputs(project_id: str):
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "2.1.0"}
+
+
+@app.get("/api/debug/api-key")
+async def debug_api_key():
+    """Debug endpoint: test if API key works inside server process."""
+    from app.llm_client import llm_client
+    try:
+        result = await llm_client.call(
+            messages=[{"role": "user", "content": "say ok"}],
+            project_id="debug",
+            stage="debug",
+            max_tokens=5,
+        )
+        return {
+            "status": "ok",
+            "key_length": len(llm_client.api_key),
+            "key_preview": llm_client.api_key[:8] + "...",
+            "response": result[:50],
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error_type": type(e).__name__,
+            "error_msg": str(e),
+            "key_length": len(llm_client.api_key),
+            "key_preview": llm_client.api_key[:8] + "..." if llm_client.api_key else "(empty)",
+        }

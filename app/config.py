@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 # Always load .env from project root (parent of app/), regardless of cwd
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(_PROJECT_ROOT / ".env")
+load_dotenv(_PROJECT_ROOT / ".env", override=True)
 
 
 class Settings:
