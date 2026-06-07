@@ -7,6 +7,7 @@ import ScriptEditor from './ScriptEditor'
 import EventsBoard from './EventsBoard'
 import AnalysisBoard from './AnalysisBoard'
 import ReviewPanel from './ReviewPanel'
+import LandingPage from './LandingPage'
 
 const TABS = [
   { key: 'events', label: '事件核对' },
@@ -163,6 +164,8 @@ function ResizeHandle({ onDrag, direction = 'col' }) {
 }
 
 export default function App() {
+  const [view, setView] = useState('landing')
+
   const {
     projectId, pipelineStatus, error, warnings, clearError, chapterCount,
     failedStage, retryFailedStage, totalDurationSec, totalCost, exportOutputs,
@@ -206,6 +209,10 @@ export default function App() {
     const newWidth = Math.max(200, Math.min(rect.right - e.clientX, rect.width * 0.5))
     setRightWidth(newWidth)
   }, [])
+
+  if (view === 'landing') {
+    return <LandingPage onEnterApp={() => setView('app')} />
+  }
 
   return (
     <div className="app">
