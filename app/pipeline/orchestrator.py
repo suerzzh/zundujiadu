@@ -9,6 +9,7 @@ Accumulates total_cost from LLM logger.
 import asyncio
 import json
 import time
+import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Callable, Optional
@@ -169,6 +170,8 @@ class PipelineOrchestrator:
                 "outputs": {"analysis_json": f"workspace/{self.project_id}/20_analysis/analysis.json"},
             })
         except Exception as e:
+            print(f"[Orchestrator] Analyzer stage failed: {type(e).__name__}: {e}")
+            print(f"[Orchestrator] Full traceback:\n{traceback.format_exc()}")
             self._emit_event({
                 "event": "stage_failed",
                 "stage": "analyzer",

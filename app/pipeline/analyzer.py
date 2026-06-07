@@ -4,6 +4,8 @@ Stage 1: Reads events.json (NOT raw novel), outputs analysis.json to workspace/2
 Injects references/01-adaptation-system.md into system prompt.
 """
 
+import traceback
+
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -71,7 +73,9 @@ class AnalyzerAgent(BaseAgent):
                 )
                 break
             except Exception as e:
+                print(f"[Analyzer] Attempt {attempt + 1} failed: {type(e).__name__}: {e}")
                 if attempt >= 2:
+                    print(f"[Analyzer] Full traceback:\n{traceback.format_exc()}")
                     raise RuntimeError(f"Analyzer failed after 2 retries: {e}")
                 # Retry with modified prompt
                 messages.append({"role": "user", "content": "请重新分析，确保输出完整JSON。"})

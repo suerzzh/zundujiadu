@@ -7,6 +7,8 @@ Supports user decision pause mechanism: review_status can be "paused"
 to let author review and decide before continuing.
 """
 
+import traceback
+
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -101,7 +103,9 @@ class ReviewerAgent(BaseAgent):
                 )
                 break
             except Exception as e:
+                print(f"[Reviewer] Attempt {attempt + 1} failed: {type(e).__name__}: {e}")
                 if attempt >= 2:
+                    print(f"[Reviewer] Full traceback:\n{traceback.format_exc()}")
                     raise RuntimeError(f"Reviewer failed after 2 retries: {e}")
                 messages.append({"role": "user", "content": "请重新审核，确保输出完整JSON。"})
 
@@ -152,13 +156,16 @@ class ReviewerAgent(BaseAgent):
         """Read and assemble all chapter scripts."""
         scripts = workspace_manager.list_files(self.project_id, "40_scripts")
         yaml_files = sorted([f for f in scripts if f.endswith(".yaml")])
+        print(f"[Reviewer] Found {len(yaml_files)} script files: {yaml_files}")
 
         parts = []
         for yaml_file in yaml_files:
             content = workspace_manager.read_file(self.project_id, "40_scripts", yaml_file)
             parts.append(content)
 
-        return "\n\n---\n\n".join(parts)
+        result = "\n\n---\n\n".join(parts)
+        print(f"[Reviewer] Assembled script length: {len(result)} chars")
+        return result
 
     def _format_continuity(self, continuity_data: dict) -> str:
         """Format continuity data for LLM input."""
