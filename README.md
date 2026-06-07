@@ -5,12 +5,13 @@
 ## Demo 视频
 
 [点击观看 Demo 视频](<!-- https://www.douyin.com/video/7648678675810951409 -->)
+https://www.douyin.com/video/7648678675810951409
 
 ---
 
 ## 项目简介
 
-Novel2Script 是一款 AI 辅助剧本创作工具，旨在打通"小说 → 影视剧本初稿"的转换链路。用户上传中文小说文本后，系统通过 5 阶段 Pipeline 自动完成事件提取、改编分析、分集规划、剧本撰写和审核校验，最终输出可编辑的结构化 YAML 剧本。
+剧本人AI- AI剧本创作助手 是一款 AI 辅助剧本创作工具，旨在打通"小说 → 影视剧本初稿"的转换链路。用户上传中文小说文本后，系统通过 5 阶段 Pipeline 自动完成事件提取、改编分析、分集规划、剧本撰写和审核校验，最终输出可编辑的结构化 YAML 剧本。
 
 ### 核心价值
 
@@ -155,14 +156,14 @@ novel2script/
 │   ├── concurrency.py          # 并发控制
 │   ├── pipeline/               # Pipeline 核心
 │   │   ├── orchestrator.py     # 流程编排器
-│   │   ├── extractor.py        # 事件提取 Agent
-│   │   ├── analyzer.py         # 改编分析 Agent
-│   │   ├── planner.py          # 分集规划 Agent
-│   │   ├── writer.py           # 剧本撰写 Agent
-│   │   ├── reviewer.py         # 审核校验 Agent
+│   │   ├── extractor.py        # 事件提取 
+│   │   ├── analyzer.py         # 改编分析 
+│   │   ├── planner.py          # 分集规划 
+│   │   ├── writer.py           # 剧本撰写 
+│   │   ├── reviewer.py         # 审核校验 
 │   │   ├── assembler.py        # 剧本组装器
 │   │   ├── retry.py            # 重试机制
-│   │   └── base.py             # Agent 基类
+│   │   └── base.py             # 基类
 │   ├── prompts/                # Prompt 模板 (Markdown)
 │   └── references/             # 参考知识库
 ├── frontend/                   # 前端应用
