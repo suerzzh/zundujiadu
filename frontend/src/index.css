@@ -85,19 +85,84 @@ body {
 
 .panel-left {
   width: 320px;
-  border-right: 1px solid var(--border);
+  min-width: 200px;
+  border-right: none;
   background: var(--bg-card);
 }
 
 .panel-center {
   flex: 1;
+  min-width: 300px;
   background: var(--bg-surface-lowest);
 }
 
 .panel-right {
   width: 384px;
-  border-left: 1px solid var(--border);
+  min-width: 200px;
+  max-width: 50vw;
+  border-left: none;
   background: var(--bg-card);
+}
+
+.panel-right .panel-body {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.panel-right .card {
+  min-width: 0;
+}
+
+.panel-right .data-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.panel-right .data-table td,
+.panel-right .data-table th {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+}
+
+/* Resize handle */
+.resize-handle {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  z-index: 10;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.resize-handle-col {
+  width: 6px;
+  height: 100%;
+  transition: background-color 0.15s ease;
+}
+
+.resize-handle-col:hover,
+.resize-handle-col:active {
+  background: rgba(70, 72, 212, 0.08);
+}
+
+.resize-handle-bar {
+  width: 3px;
+  height: 32px;
+  border-radius: 2px;
+  background: var(--border);
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.resize-handle-col:hover .resize-handle-bar,
+.resize-handle-col:active .resize-handle-bar {
+  opacity: 1;
+  background: var(--primary);
 }
 
 .panel-header {
@@ -318,14 +383,9 @@ body {
 /* Tabs */
 .tabs {
   display: flex;
+  width: 100%;
   border-bottom: 1px solid var(--border);
   background: var(--bg-surface-lowest);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.tabs::-webkit-scrollbar {
-  display: none;
 }
 
 .tab {
@@ -337,6 +397,8 @@ body {
   transition: all 0.2s ease;
   white-space: nowrap;
   font-weight: 500;
+  flex: 1;
+  text-align: center;
 }
 
 .tab:hover {
@@ -679,6 +741,7 @@ body {
   height: 100%;
   color: var(--text-muted);
   gap: 16px;
+  width: 100%;
 }
 
 .empty-state-icon {
@@ -773,7 +836,7 @@ body {
   font-weight: 500;
 }
 
-.toggle-btn:hover {
+.toggle-btn:hover:not(:disabled) {
   border-color: var(--primary);
   color: var(--primary);
 }
@@ -784,6 +847,13 @@ body {
   color: white;
   box-shadow: 0 2px 6px rgba(70, 72, 212, 0.2);
 }
+
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {

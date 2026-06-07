@@ -41,6 +41,9 @@ const useStore = create((set, get) => ({
   currentEpisode: null,
   error: null,
 
+  // LLM mode: 'cloud' | 'local' | 'local_only'
+  llmMode: 'cloud',
+
   // Actions
   setProject: (projectId, chapterCount, warnings) =>
     set({ projectId, chapterCount, warnings }),
@@ -216,6 +219,57 @@ const useStore = create((set, get) => ({
   setActiveChapter: (chapter) => set({ activeChapter: chapter }),
   setError: (error) => set({ error }),
   clearError: () => set({ error: null }),
+  setLlmMode: (mode) => set({ llmMode: mode }),
+
+  // Per-stage retry
+  retryStage: async (stage) => {
+    const { projectId } = get()
+    if (!projectId || !stage) return
+
+    try {
+      // Reset the specific stage status before retrying
+      set((state) => ({
+        stageProgress: {
+          ...state.stageProgress,
+          [stage]: { status: 'running', progress: 0, total: state.stageProgress[stage]?.total || 1 },
+        },
+        error: null,
+        failedStage: null,
+        failedError: null,
+        thinkingText: _getThinkingText(stage),
+      }))
+
+      const resp = await fetch(`/api/projects/${projectId}/retry/${stage}`, {
+        method: 'POST',
+      })
+      if (resp.ok) {
+        // Re-connect SSE to monitor the retry
+        get().connectSSE()
+      } else {
+        const errData = await resp.json().catch(() => ({}))
+        set((state) => ({
+          stageProgress: {
+            ...state.stageProgress,
+            [stage]: { status: 'failed', progress: 0, total: state.stageProgress[stage]?.total || 1 },
+          },
+          error: `${stage} 重试失败: ${errData.detail || '未知错误'}`,
+          thinkingText: '',
+          failedStage: stage,
+        }))
+      }
+    } catch (e) {
+      console.error('Retry stage failed:', e)
+      set((state) => ({
+        stageProgress: {
+          ...state.stageProgress,
+          [stage]: { status: 'failed', progress: 0, total: state.stageProgress[stage]?.total || 1 },
+        },
+        error: `${stage} 重试失败: ${e.message}`,
+        thinkingText: '',
+        failedStage: stage,
+      }))
+    }
+  },
 
   reset: () => set({
     projectId: null,
@@ -246,6 +300,7 @@ const useStore = create((set, get) => ({
     activeChapter: null,
     currentEpisode: null,
     error: null,
+    llmMode: 'cloud',
   }),
 }))
 
