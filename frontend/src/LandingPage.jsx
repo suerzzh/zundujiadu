@@ -150,7 +150,7 @@ export default function LandingPage({ onEnterApp }) {
         <div className="lp-badge">
           <span className="lp-badge-dot" /> AI 驱动的剧本创作引擎
         </div>
-        <h1>让每一部小说，都值得被拍成网剧</h1>
+        <h1>让每一部小说，都值得被拍成网<br/>剧</h1>
         <p className="lp-hero-subtitle">
           上传你的小说，AI 自动拆解情节、重构叙事节奏、生成专业网剧分镜剧本。从文学到画面，只需几分钟。
         </p>
