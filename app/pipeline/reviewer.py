@@ -94,13 +94,26 @@ class ReviewerAgent(BaseAgent):
         # Retry logic: spec requires 2 retries for stage 4 = 3 total attempts
         for attempt in range(3):
             try:
-                review = await llm_client.call_with_model(
-                    messages=messages,
-                    output_model=Review,
-                    project_id=self.project_id,
-                    stage=self.stage_name,
-                    temperature=0.3,
-                )
+                if self._stream_callback:
+                    # Streaming mode: collect full text then parse
+                    full_content = ""
+                    async for chunk in llm_client.stream_call(
+                        messages=messages,
+                        project_id=self.project_id,
+                        stage=self.stage_name,
+                        temperature=0.3,
+                    ):
+                        full_content += chunk
+                        self._stream_callback(self.stage_name, chunk)
+                    review = llm_client._parse_output(full_content, Review)
+                else:
+                    review = await llm_client.call_with_model(
+                        messages=messages,
+                        output_model=Review,
+                        project_id=self.project_id,
+                        stage=self.stage_name,
+                        temperature=0.3,
+                    )
                 break
             except Exception as e:
                 print(f"[Reviewer] Attempt {attempt + 1} failed: {type(e).__name__}: {e}")

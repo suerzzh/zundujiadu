@@ -49,6 +49,20 @@ class PipelineOrchestrator:
             except Exception:
                 pass
 
+    def _make_stream_callback(self, stage: str):
+        """Create a stream callback that emits llm_chunk SSE events.
+
+        The callback is passed to agents so they can forward LLM output
+        chunks through the orchestrator's event system.
+        """
+        def on_chunk(stage_name: str, chunk_text: str):
+            self._emit_event({
+                "event": "llm_chunk",
+                "stage": stage_name,
+                "chunk": chunk_text,
+            })
+        return on_chunk
+
     async def run_pipeline(
         self,
         novel_text: str,
@@ -117,6 +131,7 @@ class PipelineOrchestrator:
 
         try:
             extractor = ExtractorAgent(self.project_id)
+            extractor.set_stream_callback(self._make_stream_callback("extractor"))
 
             def extractor_progress(stage, chapter, total, status):
                 self._events_count += 1
@@ -162,6 +177,7 @@ class PipelineOrchestrator:
 
         try:
             analyzer = AnalyzerAgent(self.project_id)
+            analyzer.set_stream_callback(self._make_stream_callback("analyzer"))
             analysis = await analyzer.execute()
             self._emit_event({
                 "event": "stage_completed",
@@ -192,6 +208,7 @@ class PipelineOrchestrator:
 
         try:
             planner = PlannerAgent(self.project_id)
+            planner.set_stream_callback(self._make_stream_callback("planner"))
             plan = await planner.execute()
             self._emit_event({
                 "event": "stage_completed",
@@ -221,6 +238,7 @@ class PipelineOrchestrator:
 
         try:
             writer = WriterAgent(self.project_id)
+            writer.set_stream_callback(self._make_stream_callback("writer"))
 
             def writer_progress(stage, chapter, total, status):
                 self._events_count += 1
@@ -270,6 +288,7 @@ class PipelineOrchestrator:
 
             # Then review
             reviewer = ReviewerAgent(self.project_id)
+            reviewer.set_stream_callback(self._make_stream_callback("reviewer"))
             review = await reviewer.execute()
 
             self._emit_event({

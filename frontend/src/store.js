@@ -17,6 +17,8 @@ const useStore = create((set, get) => ({
     reviewer: { status: 'pending', progress: 0, total: 0 },
   },
   thinkingText: '',
+  streamingText: '',
+  streamingStage: '',
 
   // B8: Pipeline completion stats
   totalDurationSec: null,
@@ -65,6 +67,8 @@ const useStore = create((set, get) => ({
           [stage]: { status: 'running', progress: 0, total: event.total_chapters || 1 },
         },
         thinkingText: _getThinkingText(stage),
+        streamingText: '',
+        streamingStage: '',
         failedStage: null,
         failedError: null,
       }))
@@ -83,6 +87,20 @@ const useStore = create((set, get) => ({
       }))
     }
 
+    if (type === 'llm_chunk') {
+      set((state) => {
+        const currentStage = state.streamingStage
+        const newStage = stage || currentStage
+        const isStageChange = newStage !== currentStage
+        return {
+          streamingStage: newStage,
+          streamingText: isStageChange
+            ? (event.chunk || '')
+            : (state.streamingText + (event.chunk || '')),
+        }
+      })
+    }
+
     if (type === 'stage_completed') {
       set((state) => ({
         stageProgress: {
@@ -90,6 +108,8 @@ const useStore = create((set, get) => ({
           [stage]: { status: 'completed', progress: 100, total: state.stageProgress[stage]?.total || 1 },
         },
         thinkingText: '',
+        streamingText: '',
+        streamingStage: '',
       }))
     }
 
@@ -101,6 +121,8 @@ const useStore = create((set, get) => ({
         },
         error: `${stage} 阶段失败: ${event.error}`,
         thinkingText: '',
+        streamingText: '',
+        streamingStage: '',
         // B6: Store failed stage info for retry button
         failedStage: stage,
         failedError: event.error,
@@ -111,6 +133,8 @@ const useStore = create((set, get) => ({
       set({
         pipelineStatus: 'completed',
         thinkingText: '',
+        streamingText: '',
+        streamingStage: '',
         failedStage: null,
         failedError: null,
         // B8: Store total duration and cost
@@ -169,7 +193,7 @@ const useStore = create((set, get) => ({
     const evtSource = new EventSource(`/api/projects/${projectId}/convert/stream`)
 
     // Use typed event listeners to match backend SSE event types
-    const eventTypes = ['stage_started', 'stage_progress', 'stage_completed', 'stage_failed', 'pipeline_completed']
+    const eventTypes = ['stage_started', 'stage_progress', 'stage_completed', 'stage_failed', 'pipeline_completed', 'llm_chunk']
     eventTypes.forEach((type) => {
       evtSource.addEventListener(type, (e) => {
         try {
@@ -285,6 +309,8 @@ const useStore = create((set, get) => ({
       reviewer: { status: 'pending', progress: 0, total: 0 },
     },
     thinkingText: '',
+    streamingText: '',
+    streamingStage: '',
     totalDurationSec: null,
     totalCost: null,
     failedStage: null,
