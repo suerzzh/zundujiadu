@@ -17,7 +17,7 @@
 3. 给出修改建议（可一键采纳）
 4. 计算综合评分
 
-请严格按照以下JSON格式输出：
+请严格按照以下JSON格式输出（不要输出任何其他文字）：
 
 ```json
 {
@@ -31,10 +31,28 @@
   "top_issues": [
     {"episode": 1, "scene": 2, "description": "问题描述", "suggestion": "修改建议"}
   ],
-  "suggestions": ["建议1", "建议2"],
-  "quality_gates": [
-    {"rule": "规则名", "passed": true, "details": "详情"}
+  "suggestions": [
+    {"description": "建议1", "episode": null},
+    {"description": "建议2", "episode": 1}
   ],
+  "four_pass_results": [
+    {"pass_name": "structure", "issues": ["问题1"], "suggestions": ["建议1"], "issue_count": 1, "passed": true},
+    {"pass_name": "character", "issues": [], "suggestions": [], "issue_count": 0, "passed": true},
+    {"pass_name": "dialogue", "issues": ["问题1"], "suggestions": ["建议1"], "issue_count": 1, "passed": true},
+    {"pass_name": "detail", "issues": [], "suggestions": [], "issue_count": 0, "passed": true}
+  ],
+  "cross_episode_checks": [
+    {"check_type": "hook", "has_duplicates": false, "duplicates": []},
+    {"check_type": "dialogue", "has_duplicates": false, "duplicates": []}
+  ],
+  "event_integrity_score": 0.8,
+  "review_status": "completed",
   "overall_score": 7.8
 }
 ```
+
+注意：
+- `suggestions` 每项必须是对象 `{"description": "...", "episode": null}`，不能是纯字符串
+- `review_status` 只能是 completed / conditional / failed 之一
+- `event_integrity_score` 范围 0.0-1.0
+- `four_pass_results` 必须包含4项：structure, character, dialogue, detail

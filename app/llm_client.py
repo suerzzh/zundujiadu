@@ -206,9 +206,36 @@ class LLMClient:
 
         try:
             data = json.loads(json_str)
+        except json.JSONDecodeError as e:
+            raise LLMOutputError(f"Failed to parse JSON: {e}")
+
+        # Fix common LLM output mismatches for Review model
+        data = self._fix_review_data(data)
+
+        try:
             return model.model_validate(data)
-        except (json.JSONDecodeError, ValidationError) as e:
-            raise LLMOutputError(f"Failed to parse: {e}")
+        except ValidationError as e:
+            raise LLMOutputError(f"Failed to validate: {e}")
+
+    def _fix_review_data(self, data: dict) -> dict:
+        """Fix common LLM output format mismatches for Review model."""
+        # Fix suggestions: list[str] -> list[{"description": str}]
+        if "suggestions" in data and isinstance(data["suggestions"], list):
+            fixed = []
+            for item in data["suggestions"]:
+                if isinstance(item, str):
+                    fixed.append({"description": item})
+                else:
+                    fixed.append(item)
+            data["suggestions"] = fixed
+
+        # Fix top_issues: ensure suggestion field exists
+        if "top_issues" in data and isinstance(data["top_issues"], list):
+            for issue in data["top_issues"]:
+                if isinstance(issue, dict) and "suggestion" not in issue:
+                    issue["suggestion"] = ""
+
+        return data
 
     def _regex_extract(self, content: str, model: Type[T]) -> T:
         """Attempt regex extraction of JSON from LLM output."""
@@ -217,6 +244,7 @@ class LLMClient:
         if json_pattern:
             json_str = json_pattern.group(0)
             data = json.loads(json_str)
+            data = self._fix_review_data(data)
             return model.model_validate(data)
         raise LLMOutputError("No JSON block found in output")
 
