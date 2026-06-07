@@ -49,7 +49,7 @@ export default function ScriptEditor() {
         defaultLanguage="yaml"
         value={content}
         onChange={(val) => setContent(val || '')}
-        theme="vs-dark"
+        theme="vs"
         options={{
           fontSize: 13,
           minimap: { enabled: false },
@@ -57,6 +57,10 @@ export default function ScriptEditor() {
           lineNumbers: 'on',
           scrollBeyondLastLine: false,
           padding: { top: 12 },
+          fontFamily: "'JetBrains Mono', monospace",
+          backgroundColor: '#ffffff',
+          renderLineHighlight: 'line',
+          selectionHighlight: true,
         }}
       />
     </div>
