@@ -73,14 +73,26 @@ class PlannerAgent(BaseAgent):
                     stage=self.stage_name,
                     temperature=0.6,
                 )
-                break
+                # Validate plan after generation
+                validation_issues = self._validate_plan(plan, events_data)
+                if not validation_issues:
+                    break
+                # Feed validation feedback back to LLM for retry
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        f"上一次生成的计划验证未通过，问题如下：\n"
+                        f"{'; '.join(validation_issues)}\n\n"
+                        f"请根据以上反馈重新生成计划，确保：\n"
+                        f"1. 三幕结构完整（setup/escalation/climax/resolution）\n"
+                        f"2. 事件覆盖率≥70%\n"
+                        f"3. 集数满足最低要求"
+                    )
+                })
             except Exception as e:
                 if attempt >= 2:
                     raise RuntimeError(f"Planner failed after 2 retries: {e}")
                 messages.append({"role": "user", "content": "请重新规划，确保输出完整JSON。"})
-
-        # Validate plan
-        self._validate_plan(plan, events_data)
 
         # Save to workspace
         workspace_manager.write_json(
@@ -130,19 +142,12 @@ class PlannerAgent(BaseAgent):
             lines.append(f"第{ch['chapter']}章: {', '.join(ch.get('events', {}).get('events', []))}")
         return "\n".join(lines)
 
-    def _validate_plan(self, plan: EpisodePlan, events_data: dict = None) -> None:
+    def _validate_plan(self, plan: EpisodePlan, events_data: dict = None) -> list[str]:
         """Validate plan meets hard requirements from design spec.
 
-        Checks:
-        - Episode numbers are sequential
-        - Each episode has a hook
-        - Hooks are not duplicated across episodes
-        - Three-act structure is covered across episodes
-        - Emotion curve doesn't decline 3+ episodes in a row
-        - Satisfaction points are distributed (not all in one episode)
-        - Event coverage rate (events from events.json must be covered)
-        - Source chapters coverage (all chapters must be referenced)
-        - Minimum episode count
+        Returns:
+            List of validation issue strings. Empty list means all checks passed.
+            Caller decides whether to retry or raise error.
         """
         if not plan.episodes:
             raise ValueError("Plan has no episodes")
@@ -268,7 +273,5 @@ class PlannerAgent(BaseAgent):
 
         if issues:
             issues_text = "; ".join(issues)
-            if len(issues) >= 3:
-                raise ValueError(f"Plan validation found {len(issues)} issues: {issues_text}")
-            else:
-                print(f"[Planner] Warnings: {issues_text}")
+            print(f"[Planner] Validation issues ({len(issues)}): {issues_text}")
+        return issues
